@@ -140,7 +140,8 @@ class BGP(dpkt.Packet):
     class Open(dpkt.Packet):
         __hdr__ = (
             ('v', 'B', 4),
-            ('asn', 'H', 0),
+            #('asn', 'H', 0),
+            ('asn', 'I', 0),
             ('holdtime', 'H', 0),
             ('identifier', 'I', 0),
             ('param_len', 'B', 0)
