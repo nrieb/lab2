@@ -67,6 +67,7 @@ def ip4_to_str(ip4):
 
 bad_bgp = 0
 count = 0
+withdrawn_count = 0
 # trying 24b-router.pcap
 for file_name in sys.argv[1:]:
 #for file_name in fileinput.input():
@@ -89,16 +90,20 @@ for file_name in sys.argv[1:]:
                 # ignore tcp setup (len == 0)
                 if (tcp.dport == 179 or tcp.sport == 179) and len(tcp.data):
                     try:
-                        if i == 54:
-                            data = bgp_parse(tcp.data, i)
-                            print data
-                            print len(data)
-                        else:
-                            bgp_parse(tcp.data, i)
+                        for bgp in bgp_parse(tcp.data, i):
+                            #parse bgp here
+                            #process(bgp)
+                                if bgp.type == dpkt.bgp.UPDATE:
+                                    print ""
+                                    print bgp.update.withdrawn
+                                    print bgp.update.announced
+                                    print ""
+                                    if len(bgp.update.withdrawn):
+                                        withdrawn_count += 1
                     except:
                         #print "fail on packet", i, ip4_to_str(ip.src), ip4_to_str(ip.dst)
                         bad_bgp += 1
                         raise
-
+            #print withdrawn_count
     except dpkt.dpkt.NeedData:
         continue
