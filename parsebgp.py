@@ -121,11 +121,10 @@ for file_name in sys.argv[1:]:
                 if (tcp.dport == 179 or tcp.sport == 179) and len(tcp.data) and ip.dst == interesting_ip:
                     try:
                         for bgp in bgp_parse(tcp.data, i):
-                            #parse bgp here
-                            #process(bgp)
                             if bgp.type == dpkt.bgp.OPEN:
-                                AS = get_AS(bgp.open)
-                                ip_list[ip4_to_str(ip.src)] = AS
+                                #AS = get_AS(bgp.open)
+                                #ip_list[ip4_to_str(ip.src)] = AS
+                                pass
                             elif bgp.type == dpkt.bgp.UPDATE:
                                 process_update(graph, bgp.update, ip_list[ip4_to_str(ip.src)])
                                 pass
@@ -134,6 +133,14 @@ for file_name in sys.argv[1:]:
                         #print "fail on packet", i, ip4_to_str(ip.src), ip4_to_str(ip.dst)
                         bad_bgp += 1
                         raise
+            for AS, node in graph.nodes.viewitems():
 
+                if '0.0.0.0/0' in node.subnets:
+                    print AS, len(node.subnets)
+                '''
+                if len(node.withdrawn):
+                    print sorted(node.subnets)
+                    print sorted(node.withdrawn)
+                '''
     except dpkt.dpkt.NeedData:
         continue

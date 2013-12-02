@@ -1,4 +1,5 @@
 #! /usr/bin/env python
+import socket
 
 class ASGraph(object):
     # graph with 1 root node set means we assume only one directed
@@ -27,7 +28,7 @@ class ASGraph(object):
         for AS in path:
             assert AS != 'root'
             if not self.nodes.has_key(AS):
-                self.nodes[AS] = self.Node(len(self.graph), [], [])
+                self.nodes[AS] = self.Node(len(self.graph), set([]), set([]))
                 self.graph.append(set([]))
 
             self.graph[prevKey].add(self.nodes[AS])
@@ -46,14 +47,25 @@ class ASGraph(object):
             self.key = key
             self.subnets = subnets
             self.withdrawn = withdrawn
-
+        
+        @staticmethod
+        def _subnet_to_str(subnet):
+            return "%s/%d" % (socket.inet_ntoa(subnet.prefix), subnet.len)
+            
         def add_subnets(self, subnets):
             for subnet in subnets:
-                self.subnets.append(subnet)
+                readable_subnet = self._subnet_to_str(subnet)
+                if readable_subnet in self.withdrawn:
+                    self.withdrawn.remove(readable_subnet)
+                self.subnets.add(readable_subnet)
         
         def add_withdrawn(self, subnets):
             for subnet in subnets:
-                self.withdrawn.append(subnets)
+                readable_subnet = self._subnet_to_str(subnet)
+                if readable_subnet in self.subnets:
+                    self.subnets.remove(readable_subnet)
+                else:
+                    self.withdrawn.add(readable_subnet)
 
         def __repr__(self):
             return "self.Node(key=%r, subnets=%r, withdrawn=%r)" % (self.key, self.subnets, self.withdrawn)
