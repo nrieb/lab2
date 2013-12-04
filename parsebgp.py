@@ -6,35 +6,22 @@ python parsebgp.py <pcap file>
 Note: this currently assumes that the AS in the AS path
 are 4 octets long NOT 2 octets.  If this is not true, this
 will break
+
+Also, this script assumes nets9b-router-04-tap0.pcap is the pcap file
+if it is not, ip_list and interesting_ip need to be changed.  ip_list is 
+just the AS of of the ips directly talking to interesting_ip.  interesting_ip
+was just the destination ip with the most tcp packets talking bgp in the pcap
+file.  These can be computed with a pass through the pcap file before the pass
+that creates the graph.
 '''
 
 import socket
 import sys
-import fileinput
 import struct
 import dpkt
 from ASgraph import *
 
 FOUR_OCTET_AS = 65
-
-def type_to_string(num):
-    if num == 1:
-        return "OPEN"
-    elif num == 2:
-        return "UPDATE"
-    elif num == 3:
-        return "NOTIFICATION"
-    elif num == 4:
-        return "KEEPALIVE"
-    elif num == 5:
-        return "ROUTE_REFRESH"
-
-def update_parse(bgp_update):
-    assert bgp_update.type == dpkt.bgp.UPDATE
-    for attr in bgp_update.update.attributes:
-        if attr.type == bgp.AS_PATH:
-            print path_to_str(attr.as_path)
-            break
 
 def bgp_parse(raw_tcp_data, packet_num):
     tcp_len = len(raw_tcp_data)
@@ -45,18 +32,15 @@ def bgp_parse(raw_tcp_data, packet_num):
         try:
             data_len = struct.unpack(">H", raw_tcp_data[16:18])[0]
         except:
-            #print dpkt.hexdump(raw_tcp_data)
-            #print packet_num, "failed on sub-packet" , i, log_len, tcp_len
+            #trailing bytes that don't make up another bgp packet
+            #just return the list we have
             return l
         try:
             l.append(dpkt.bgp.BGP(raw_tcp_data[:header_len + data_len]))
         except dpkt.dpkt.UnpackError:
+            #misconstructed bgp packet
             print packet_num, "failed on sub-packet" , i
             pass
-
-            
-        #print len(raw_tcp_data[:data_len])
-        #print dpkt.hexdump(raw_tcp_data[:header_len])
         raw_tcp_data = raw_tcp_data[data_len:]
         tcp_len -= data_len
         i+=1
@@ -90,16 +74,12 @@ def ip4_to_str(ip4):
     return "%d.%d.%d.%d" % struct.unpack("@BBBB", ip4)
     
 
-bad_bgp = 0
-count = 0
-withdrawn_no_path_count = 0
 # Assuming that pcap started part way through.  these are the AS numbers of the ips directly talking to 109
 ip_list = {'192.168.212.116': 65716, '192.168.212.113': 65713, '192.168.212.112': 65812}
-# trying 24b-router.pcap
 for file_name in sys.argv[1:]:
-#for file_name in fileinput.input():
     try:
         i = 0
+        bgp_update_count = 0
         with open(file_name.strip(), 'rb') as f:
             graph = ASGraph()
             for ts, pkt in dpkt.pcap.Reader(f):
@@ -119,28 +99,20 @@ for file_name in sys.argv[1:]:
                 # 192.168.212.109 looks like the router.  only look at things that talk at it
                 interesting_ip = struct.pack("BBBB", 192, 168, 212, 109)
                 if (tcp.dport == 179 or tcp.sport == 179) and len(tcp.data) and ip.dst == interesting_ip:
-                    try:
-                        for bgp in bgp_parse(tcp.data, i):
-                            if bgp.type == dpkt.bgp.OPEN:
-                                #AS = get_AS(bgp.open)
-                                #ip_list[ip4_to_str(ip.src)] = AS
-                                pass
-                            elif bgp.type == dpkt.bgp.UPDATE:
-                                process_update(graph, bgp.update, ip_list[ip4_to_str(ip.src)])
-                                pass
-                                
-                    except:
-                        #print "fail on packet", i, ip4_to_str(ip.src), ip4_to_str(ip.dst)
-                        bad_bgp += 1
-                        raise
-            for AS, node in graph.nodes.viewitems():
-
-                if '0.0.0.0/0' in node.subnets:
-                    print AS, len(node.subnets)
-                '''
-                if len(node.withdrawn):
-                    print sorted(node.subnets)
-                    print sorted(node.withdrawn)
-                '''
+                    for bgp in bgp_parse(tcp.data, i):
+                        if bgp.type == dpkt.bgp.OPEN:
+                            #uncomment to populate ip_list
+                            #AS = get_AS(bgp.open)
+                            #ip_list[ip4_to_str(ip.src)] = AS
+                            pass
+                        elif bgp.type == dpkt.bgp.UPDATE:
+                            bgp_update_count += 1
+                            process_update(graph, bgp.update, ip_list[ip4_to_str(ip.src)])
+                            #make a time series
+                            if not bgp_update_count % 71:
+                                graph.draw_to("output"+str(bgp_update_count)+".png")
+                            pass
+            
+            graph.draw_to("output_final.png")
     except dpkt.dpkt.NeedData:
         continue
